@@ -1,6 +1,27 @@
 # env-prefix
 
-一个命令，切换环境。不污染 shell。
+让 Claude Code CLI 支持多模型并行编辑的环境切换工具。
+
+## 问题
+
+Claude Code CLI 默认只能用一个模型。想同时用 Sonnet 和 Opus？想对比不同模型的输出？做不到。
+
+## 解决方案
+
+一次配置，永久使用。通过环境前缀快速切换模型：
+
+```bash
+claude "写个函数"           # 默认模型
+sonnet claude "写个函数"    # Sonnet 模型
+opus claude "写个函数"      # Opus 模型
+```
+
+多个终端窗口，不同模型，并行编辑。充分发挥 Claude Code 的能力。
+
+## 系统要求
+
+- macOS
+- Claude Code CLI 已安装
 
 ## 安装
 
@@ -10,100 +31,112 @@ cd env-prefix
 ./install.sh
 ```
 
-**重要**：如果提示需要添加 PATH，运行：
+如果提示需要添加 PATH：
 
 ```bash
-# zsh 用户
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
-
-# bash 用户
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
 ```
 
-这样重启后也能用。
+## 配置模型
 
-## 使用
-
-```bash
-claude              # 直接用 claude
-sonnet claude       # 用 sonnet 环境的 claude
-```
-
-## 添加新环境
-
-### 1. 创建配置文件
-
-**文件名 = 命令名**
-
-```bash
-# 想用 myenv 命令？创建 myenv.env
-cp config/sonnet.env.template config/myenv.env
-
-# 想用 prod 命令？创建 prod.env
-cp config/sonnet.env.template config/prod.env
-
-# 编辑配置
-vim config/myenv.env
-```
-
-### 2. 更新到全局
-
-```bash
-./install.sh
-```
-
-### 3. 使用
-
-```bash
-myenv claude    # 用 myenv.env 的配置
-prod claude     # 用 prod.env 的配置
-```
-
-## 配置示例
-
-### AWS Bedrock
+### Sonnet (AWS Bedrock)
 
 `config/sonnet.env`：
 ```bash
 export CLAUDE_CODE_USE_BEDROCK=1
 ```
 
-### OpenAI
+### Opus (AWS Bedrock)
 
-`config/gpt.env`：
+`config/opus.env`：
 ```bash
-export OPENAI_API_KEY="sk-xxxx"
+export CLAUDE_CODE_USE_BEDROCK=1
+export CLAUDE_MODEL="claude-opus-4-20250514"
 ```
 
-### 自定义环境变量
+### 其他模型
 
-`config/myenv.env`：
+`config/mymodel.env`：
 ```bash
-export MY_API_KEY="xxx"
-export MY_REGION="us-west-1"
-export ENV_PREFIX_REQUIRED="MY_API_KEY"  # 必需变量校验
+export CLAUDE_CODE_USE_BEDROCK=1
+export CLAUDE_MODEL="your-model-id"
 ```
+
+## 使用
+
+```bash
+# 默认模型
+claude "帮我重构这个函数"
+
+# Sonnet 模型
+sonnet claude "帮我重构这个函数"
+
+# Opus 模型
+opus claude "帮我重构这个函数"
+```
+
+### 并行编辑
+
+打开多个终端窗口，用不同模型同时工作：
+
+```bash
+# 终端 1 - Sonnet 快速迭代
+sonnet claude "优化性能"
+
+# 终端 2 - Opus 深度思考
+opus claude "设计架构"
+
+# 终端 3 - 默认模型
+claude "写测试"
+```
+
+## 添加新模型
+
+```bash
+# 1. 创建配置（文件名 = 命令名）
+cp config/sonnet.env.template config/gpt4.env
+vim config/gpt4.env
+
+# 2. 更新
+./install.sh
+
+# 3. 使用
+gpt4 claude "你的问题"
+```
+
+## 优势
+
+- **一次配置，永久使用**：配置保存在 `~/.env-prefix/`，重启不失效
+- **快速切换**：一个前缀，切换模型
+- **并行编辑**：多个终端，不同模型，同时工作
+- **不污染环境**：环境变量只在子进程生效
+- **简单直接**：文件名就是命令名
 
 ## 工作原理
 
-1. `myenv` 命令检查是否存在 `~/.env-prefix/myenv.env`
-2. 存在 → 加载环境变量，执行后面的命令
-3. 不存在 → 直接执行命令
+1. `sonnet` 命令检查 `~/.env-prefix/sonnet.env`
+2. 加载环境变量（如 `CLAUDE_CODE_USE_BEDROCK=1`）
+3. 执行原生 `claude` 命令
+4. 环境变量只在这次执行中生效
 
-环境变量只在子进程生效，不影响当前 shell。
+## 更新配置
+
+```bash
+vim config/sonnet.env
+./install.sh
+```
 
 ## 常见问题
 
 **Q: 重启后还能用吗？**  
-A: 能！配置文件在 `~/.env-prefix/`，符号链接在 `~/.local/bin/`，都是永久的。只要 PATH 设置正确就行。
+A: 能！配置永久保存在 `~/.env-prefix/`，只要 PATH 设置正确。
 
-**Q: 如何更新配置？**  
-A: 编辑 `config/*.env`，然后运行 `./install.sh`
+**Q: 如何删除模型？**  
+A: 删除 `config/mymodel.env`，运行 `./install.sh`
 
-**Q: 如何删除环境？**  
-A: 删除 `~/.env-prefix/myenv.env` 和 `~/.local/bin/myenv`
+**Q: 支持其他系统吗？**  
+A: 目前只支持 macOS，脚本是 POSIX 兼容的，理论上可以在 Linux 使用。
 
-**Q: 配置文件在哪？**  
-A: 项目里：`config/*.env`，全局：`~/.env-prefix/*.env`
+**Q: 会影响其他 claude 命令吗？**  
+A: 不会。只有带前缀的命令才会加载环境变量。
