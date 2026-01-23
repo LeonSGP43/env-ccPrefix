@@ -28,6 +28,7 @@ opus claude "写个函数"      # Opus 模型
 ```bash
 git clone https://github.com/your-org/env-prefix.git
 cd env-prefix
+chmod +x install.sh  # 添加执行权限
 ./install.sh
 ```
 
