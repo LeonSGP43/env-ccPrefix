@@ -1,0 +1,76 @@
+#!/bin/sh
+# POSIX-compatible version
+set -e
+
+SELF="${0##*/}"
+
+# ========= 环境文件位置 =========
+ENV_PREFIX_HOME="${ENV_PREFIX_HOME:-$HOME/.env-prefix}"
+
+# ========= 判断是否为环境前缀 =========
+# 如果有参数且存在对应的 .env 文件，则作为环境前缀
+# 否则作为普通命令执行
+ENV_NAME=""
+TARGET_CMD="$SELF"
+
+if [ $# -gt 0 ]; then
+  # 检查是否存在 <命令名>.env 配置文件
+  POTENTIAL_ENV_FILE="$ENV_PREFIX_HOME/$SELF.env"
+  if [ -f "$POTENTIAL_ENV_FILE" ]; then
+    # 当前命令名是环境前缀
+    ENV_NAME="$SELF"
+    TARGET_CMD="$1"
+    shift
+  fi
+fi
+
+# ========= 加载环境配置 =========
+if [ -n "$ENV_NAME" ]; then
+  ENV_FILE="$ENV_PREFIX_HOME/$ENV_NAME.env"
+  if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+  fi
+  
+  # ========= 必需变量校验 =========
+  if [ -n "$ENV_PREFIX_REQUIRED" ]; then
+    IFS=','
+    for var in $ENV_PREFIX_REQUIRED; do
+      eval "value=\${$var}"
+      if [ -z "$value" ]; then
+        printf "Error: Required environment variable '%s' is not set\n" "$var" >&2
+        exit 1
+      fi
+    done
+    unset IFS
+  fi
+fi
+
+# ========= 查找并执行目标命令 =========
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ORIGINAL_CMD=""
+
+IFS=':'
+for dir in $PATH; do
+  # 跳过当前脚本所在目录
+  if [ "$dir" = "$SCRIPT_DIR" ]; then
+    continue
+  fi
+  
+  candidate="$dir/$TARGET_CMD"
+  if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
+    ORIGINAL_CMD="$candidate"
+    break
+  fi
+done
+unset IFS
+
+if [ -z "$ORIGINAL_CMD" ]; then
+  printf "Error: Command '%s' not found in PATH\n" "$TARGET_CMD" >&2
+  exit 1
+fi
+
+# ========= 执行命令 =========
+exec "$ORIGINAL_CMD" "$@"
