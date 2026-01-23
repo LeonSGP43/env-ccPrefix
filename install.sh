@@ -39,10 +39,34 @@ for env_file in config/*.env; do
 done
 echo ""
 
-# 4. 检查 PATH
+# 4. 检查并自动添加 PATH
 if ! echo "$PATH" | grep -q "$BIN_DIR"; then
-    echo "⚠️  请将以下内容添加到你的 ~/.zshrc 或 ~/.bashrc："
-    echo "   export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo "⚠️  检测到 PATH 中没有 $BIN_DIR"
+    echo ""
+    
+    # 检测 shell 类型
+    SHELL_RC=""
+    if [ -f "$HOME/.zshrc" ]; then
+        SHELL_RC="$HOME/.zshrc"
+    elif [ -f "$HOME/.bashrc" ]; then
+        SHELL_RC="$HOME/.bashrc"
+    fi
+    
+    if [ -n "$SHELL_RC" ]; then
+        printf "是否自动添加到 %s? (y/n): " "$SHELL_RC"
+        read -r reply
+        if [ "$reply" = "y" ] || [ "$reply" = "Y" ]; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+            echo "✅ 已添加到 $SHELL_RC"
+            echo "   请运行: source $SHELL_RC"
+        else
+            echo "请手动添加以下内容到 $SHELL_RC："
+            echo "   export PATH=\"\$HOME/.local/bin:\$PATH\""
+        fi
+    else
+        echo "请手动添加以下内容到你的 ~/.zshrc 或 ~/.bashrc："
+        echo "   export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
     echo ""
 fi
 

@@ -31,12 +31,19 @@ cd env-prefix
 ./install.sh
 ```
 
-如果提示需要添加 PATH：
+**⚠️ 重要**：如果看到 PATH 警告，执行以下命令：
 
 ```bash
+# zsh 用户（macOS 默认）
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
+
+# bash 用户
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
 ```
+
+执行后，重启终端或运行 `source ~/.zshrc` 即可使用。
 
 ## 配置模型
 
