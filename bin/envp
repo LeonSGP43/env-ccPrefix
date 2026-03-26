@@ -6,34 +6,62 @@ SELF="${0##*/}"
 
 # ========= 环境文件位置 =========
 ENV_PREFIX_HOME="${ENV_PREFIX_HOME:-$HOME/.env-prefix}"
+ENV_FILE="$ENV_PREFIX_HOME/$SELF.env"
 
-# ========= 判断是否为环境前缀 =========
-# 如果有参数且存在对应的 .env 文件，则作为环境前缀
-# 否则作为普通命令执行
+load_env_file() {
+  if [ -f "$1" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$1"
+    set +a
+  fi
+}
+
+# ========= 判断是否为环境前缀/包装命令 =========
+# 1. 如果存在 <命令名>.env，则当前命令名可作为环境前缀
+# 2. 若配置了 ENV_PREFIX_TARGET_CMD，则当前命令名本身就是包装命令
+# 3. 否则回退为旧行为：<前缀> <目标命令> [参数...]
 ENV_NAME=""
 TARGET_CMD="$SELF"
+HAS_ENV_FILE=0
 
-if [ $# -gt 0 ]; then
-  # 检查是否存在 <命令名>.env 配置文件
-  POTENTIAL_ENV_FILE="$ENV_PREFIX_HOME/$SELF.env"
-  if [ -f "$POTENTIAL_ENV_FILE" ]; then
-    # 当前命令名是环境前缀
-    ENV_NAME="$SELF"
-    TARGET_CMD="$1"
-    shift
-  fi
+if [ -f "$ENV_FILE" ]; then
+  HAS_ENV_FILE=1
+  ENV_NAME="$SELF"
 fi
 
 # ========= 加载环境配置 =========
-if [ -n "$ENV_NAME" ]; then
-  ENV_FILE="$ENV_PREFIX_HOME/$ENV_NAME.env"
-  if [ -f "$ENV_FILE" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    . "$ENV_FILE"
-    set +a
+if [ "$HAS_ENV_FILE" -eq 1 ]; then
+  load_env_file "$ENV_FILE"
+
+  if [ -n "$ENV_PREFIX_EXTENDS" ]; then
+    BASE_ENV_FILE="$ENV_PREFIX_HOME/$ENV_PREFIX_EXTENDS.env"
+    if [ ! -f "$BASE_ENV_FILE" ]; then
+      printf "Error: Base environment '%s' not found for '%s'\n" "$ENV_PREFIX_EXTENDS" "$SELF" >&2
+      exit 1
+    fi
+
+    load_env_file "$BASE_ENV_FILE"
+    # 重新加载当前 env，让当前文件覆盖基础环境。
+    load_env_file "$ENV_FILE"
   fi
-  
+
+  if [ -n "$ENV_PREFIX_TARGET_CMD" ]; then
+    TARGET_CMD="$ENV_PREFIX_TARGET_CMD"
+  elif [ $# -gt 0 ]; then
+    TARGET_CMD="$1"
+    shift
+  else
+    printf "Error: No target command configured for '%s'\n" "$SELF" >&2
+    printf "Set ENV_PREFIX_TARGET_CMD in %s or call it as '%s <command> ...'\n" "$ENV_FILE" "$SELF" >&2
+    exit 1
+  fi
+
+  if [ -n "$ENV_PREFIX_DEFAULT_ARGS" ]; then
+    # 配置文件由当前用户维护，这里允许以 shell 语法声明默认参数。
+    eval "set -- $ENV_PREFIX_DEFAULT_ARGS \"\$@\""
+  fi
+
   # ========= 必需变量校验 =========
   if [ -n "$ENV_PREFIX_REQUIRED" ]; then
     IFS=','
@@ -51,15 +79,17 @@ fi
 # ========= 查找并执行目标命令 =========
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ORIGINAL_CMD=""
+SELF_CANDIDATE="$SCRIPT_DIR/$SELF"
 
 IFS=':'
 for dir in $PATH; do
-  # 跳过当前脚本所在目录
-  if [ "$dir" = "$SCRIPT_DIR" ]; then
+  candidate="$dir/$TARGET_CMD"
+
+  # 仅跳过当前包装命令本身，允许同目录下的其他真实命令（例如 godex）。
+  if [ "$candidate" = "$SELF_CANDIDATE" ]; then
     continue
   fi
-  
-  candidate="$dir/$TARGET_CMD"
+
   if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
     ORIGINAL_CMD="$candidate"
     break
@@ -70,6 +100,15 @@ unset IFS
 if [ -z "$ORIGINAL_CMD" ]; then
   printf "Error: Command '%s' not found in PATH\n" "$TARGET_CMD" >&2
   exit 1
+fi
+
+# Codex CLI deprecates openai_base_url env var.
+# If this wrapper is launching codex, translate it into a config override
+# and remove the env var to avoid startup warnings.
+if [ "${ORIGINAL_CMD##*/}" = "codex" ] && [ -n "${openai_base_url:-}" ]; then
+  openai_base_url_VALUE="$openai_base_url"
+  unset openai_base_url
+  set -- -c "openai_base_url=\"$openai_base_url_VALUE\"" "$@"
 fi
 
 # ========= 执行命令 =========
